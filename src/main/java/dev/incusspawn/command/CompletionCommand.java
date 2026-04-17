@@ -11,9 +11,9 @@ import picocli.CommandLine.Parameters;
 )
 public class CompletionCommand implements Runnable {
 
-    enum Shell { bash, zsh }
+    enum Shell { bash, zsh, fish }
 
-    @Parameters(index = "0", description = "Shell type: bash, zsh", arity = "0..1", defaultValue = "bash")
+    @Parameters(index = "0", description = "Shell type: bash, zsh, fish", arity = "0..1", defaultValue = "bash")
     Shell shell;
 
     @Option(names = "--install", description = "Print installation instructions instead of the script")
@@ -28,6 +28,7 @@ public class CompletionCommand implements Runnable {
         switch (shell) {
             case zsh  -> System.out.println(ZSH_COMPLETION);
             case bash -> System.out.println(BASH_COMPLETION);
+            case fish -> System.out.println(FISH_COMPLETION);
         }
     }
 
@@ -49,6 +50,10 @@ public class CompletionCommand implements Runnable {
                 #
                 # Option B: save to a completion file
                 #   isx completion bash > ~/.local/share/bash-completion/completions/isx
+                #
+                # ── Fish ────────────────────────────────────────────────────────────────────
+                # Save to the fish completions directory:
+                #   isx completion fish > ~/.config/fish/completions/isx.fish
                 """);
     }
 
@@ -155,7 +160,7 @@ public class CompletionCommand implements Runnable {
               _arguments \\
                 '(-h --help)'{-h,--help}'[Show help]' \\
                 '--install[Print installation instructions]' \\
-                '1::shell:(bash zsh)'
+                '1::shell:(bash zsh fish)'
             }
 
             _isx() {
@@ -318,7 +323,7 @@ public class CompletionCommand implements Runnable {
                 completion)
                   case "$prev" in
                     completion)
-                      COMPREPLY=( $(compgen -W "bash zsh --help --install" -- "$cur") )
+                      COMPREPLY=( $(compgen -W "bash zsh fish --help --install" -- "$cur") )
                       return ;;
                   esac
                   COMPREPLY=( $(compgen -W "--help --install" -- "$cur") )
@@ -330,5 +335,97 @@ public class CompletionCommand implements Runnable {
             }
 
             complete -F _isx isx
+            """;
+
+    // ── Fish completion ─────────────────────────────────────────────────────────
+
+    private static final String FISH_COMPLETION = """
+            # fish completion for isx (incus-spawn)
+
+            # Helper: list all live Incus instances
+            function __isx_instances
+              incus list --format=csv --columns=n 2>/dev/null
+            end
+
+            # Helper: list template instances (names starting with tpl-)
+            function __isx_templates
+              incus list --format=csv --columns=n 2>/dev/null | string match -r '^tpl-.*'
+            end
+
+            # Helper: true when no subcommand has been typed yet
+            function __isx_no_subcommand
+              not string match -qr -- '^(init|build|project|branch|shell|list|destroy|update-all|proxy|completion)$' (commandline -opc)[2..-1]
+            end
+
+            # Helper: true when a specific subcommand is active
+            function __isx_using_subcommand
+              string match -qr -- "\\b$argv[1]\\b" (commandline -opc)
+            end
+
+            # ── Top-level commands ───────────────────────────────────────────────────────
+
+            complete -c isx -f -n __isx_no_subcommand -a init         -d 'One-time host setup (install Incus, configure auth)'
+            complete -c isx -f -n __isx_no_subcommand -a build        -d 'Build or rebuild a template image'
+            complete -c isx -f -n __isx_no_subcommand -a project      -d 'Manage project templates'
+            complete -c isx -f -n __isx_no_subcommand -a branch       -d 'Create a new instance from an existing one'
+            complete -c isx -f -n __isx_no_subcommand -a shell        -d 'Open a shell in an existing clone'
+            complete -c isx -f -n __isx_no_subcommand -a list         -d 'List all incus-spawn environments'
+            complete -c isx -f -n __isx_no_subcommand -a destroy      -d 'Destroy a clone environment'
+            complete -c isx -f -n __isx_no_subcommand -a update-all   -d 'Update all templates (packages, git repos, dependencies)'
+            complete -c isx -f -n __isx_no_subcommand -a proxy        -d 'Start the MITM authentication proxy'
+            complete -c isx -f -n __isx_no_subcommand -a completion   -d 'Print shell completion script'
+
+            # ── branch ───────────────────────────────────────────────────────────────────
+
+            complete -c isx -f -n '__isx_using_subcommand branch' -a '(__isx_instances)' -d 'Instance name'
+            complete -c isx -f -n '__isx_using_subcommand branch' -l from        -d 'Source instance to branch from' -a '(__isx_instances)'
+            complete -c isx -f -n '__isx_using_subcommand branch' -l gui         -d 'Enable GUI passthrough (Wayland + GPU + audio)'
+            complete -c isx -f -n '__isx_using_subcommand branch' -l airgap      -d 'Disable network access (complete isolation)'
+            complete -c isx -f -n '__isx_using_subcommand branch' -l proxy-only  -d 'Restrict network to host proxy only'
+            complete -c isx -F -n '__isx_using_subcommand branch' -l inbox       -d 'Host directory to mount read-only at /home/agentuser/inbox'
+            complete -c isx -f -n '__isx_using_subcommand branch' -l cpu         -d 'CPU core limit'
+            complete -c isx -f -n '__isx_using_subcommand branch' -l memory      -d 'Memory limit, e.g. 8GB'
+            complete -c isx -f -n '__isx_using_subcommand branch' -l disk        -d 'Disk size limit'
+            complete -c isx -f -n '__isx_using_subcommand branch' -l no-start    -d "Don't start the instance after creation"
+
+            # ── build ────────────────────────────────────────────────────────────────────
+
+            complete -c isx -f -n '__isx_using_subcommand build' -a '(__isx_templates)' -d 'Template name'
+            complete -c isx -f -n '__isx_using_subcommand build' -l all     -d 'Rebuild all defined templates'
+            complete -c isx -f -n '__isx_using_subcommand build' -l missing -d 'Build only templates that don'"'"'t exist yet'
+            complete -c isx -f -n '__isx_using_subcommand build' -l vm      -d 'Build as a VM instead of a container'
+            complete -c isx -f -n '__isx_using_subcommand build' -l yes     -d 'Skip interactive confirmations'
+
+            # ── destroy ──────────────────────────────────────────────────────────────────
+
+            complete -c isx -f -n '__isx_using_subcommand destroy' -a '(__isx_instances)' -d 'Environment name'
+            complete -c isx -f -n '__isx_using_subcommand destroy' -l force -d 'Force destruction, even for templates'
+
+            # ── list ─────────────────────────────────────────────────────────────────────
+
+            complete -c isx -f -n '__isx_using_subcommand list' -l plain -d 'Plain text output (no TUI)'
+
+            # ── shell ────────────────────────────────────────────────────────────────────
+
+            complete -c isx -f -n '__isx_using_subcommand shell' -a '(__isx_instances)' -d 'Clone name'
+
+            # ── project ──────────────────────────────────────────────────────────────────
+
+            complete -c isx -f -n '__isx_using_subcommand project; and not string match -qr -- "\\b(create|update)\\b" (commandline -opc)' -a create -d 'Create a project template from a parent base image'
+            complete -c isx -f -n '__isx_using_subcommand project; and not string match -qr -- "\\b(create|update)\\b" (commandline -opc)' -a update -d 'Update a project template'
+
+            complete -c isx -F -n '__isx_using_subcommand project; and __isx_using_subcommand create' -l config -d 'Path to incus-spawn.yaml'
+            complete -c isx -F -n '__isx_using_subcommand project; and __isx_using_subcommand update' -l config -d 'Path to incus-spawn.yaml'
+            complete -c isx -f -n '__isx_using_subcommand project; and __isx_using_subcommand update' -a '(__isx_instances)' -d 'Project template name'
+
+            # ── proxy ────────────────────────────────────────────────────────────────────
+
+            complete -c isx -f -n '__isx_using_subcommand proxy' -l port        -d 'MITM TLS proxy port'
+            complete -c isx -f -n '__isx_using_subcommand proxy' -l health-port -d 'Health check HTTP port'
+
+            # ── completion ───────────────────────────────────────────────────────────────
+
+            complete -c isx -f -n '__isx_using_subcommand completion' -a 'bash zsh fish' -d 'Shell type'
+            complete -c isx -f -n '__isx_using_subcommand completion' -l install -d 'Print installation instructions'
             """;
 }
