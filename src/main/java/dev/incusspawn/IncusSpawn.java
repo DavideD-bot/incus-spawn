@@ -23,7 +23,8 @@ import picocli.CommandLine.IVersionProvider;
                 ListCommand.class,
                 DestroyCommand.class,
                 UpdateAllCommand.class,
-                ProxyCommand.class
+                ProxyCommand.class,
+                CompletionCommand.class
         }
 )
 public class IncusSpawn implements Runnable {
